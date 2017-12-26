@@ -1,0 +1,192 @@
+//当一个npm应用开始运行时的入口即是package.json，对于依赖的安装以及
+//文件的查找，package起着非常重要的作用
+//so，搭建框架，你要想明白这个架构里面存在什么，不需要什么，怎样多人维护没有困难。
+{
+  "name": "element-ui",
+  "version": "2.0.7",
+  "description": "A Component Library for Vue.js.",
+  "main": "lib/element-ui.common.js",
+  //程序主入口模块的id，如果其他用户需要你的包，当用户调用require方法时，返回的就是这个模块的导出
+  //最开始我以为就是程序的主入口，后来看了一圈发现，这是打包完成后给使用者使用的入口
+  "files": [
+    "lib",
+    "src",
+    "packages",
+    "types"
+  ],
+  //项目包含的一组文件。如果是文件夹，则文件夹下面所有都会被读取到
+  //如果需要某些文件不包含进去，则需要添加一个".npmignore"，这个文件和gitignore类似
+  // 目前这些文件夹
+  //lib:为 npm dist之后的文件，即常见的build文件
+  //src:（预留）
+  //package:开发出来的组件包
+  //types:(不懂)，大概感觉是将开发的整体公共部分抽象出来，具体怎么抽，抽什么，还需要进一步深入
+  "typings": "types/index.d.ts",
+  //目前没有查到此字段是做什么的，但是大胆才一下，感觉像是抽象公共逻辑入口
+  "scripts": {
+    "bootstrap": "yarn || npm i",
+    //npm install （感觉叫bootstrap 十分不合理）
+    "build:file": "node build/bin/iconInit.js & node build/bin/build-entry.js & node build/bin/i18n.js & node build/bin/version.js",
+    //打包文件
+    //iconInit.js看起来是把所有icon打包集合在一起了，具体代码实现逻辑还要再看一下
+    //build-entry 看名字，打包入口文件，ps，逻辑没看懂
+    //i18n.js 网上说是一种与国际接轨的标准规范
+    // verdion 版本控制逻辑
+    "build:theme": "node build/bin/gen-cssfile && gulp build --gulpfile packages/theme-chalk/gulpfile.js && cp-cli packages/theme-chalk/lib lib/theme-chalk",
+    //打包主题
+    //gen-cssfile [黑人疑问脸]
+    //gulp 运行gulp打包文件[逻辑渣]
+    //cp-cli 用于跨平台支持的Node.js 的UNIX命令 cp。
+
+    "build:utils": "cross-env BABEL_ENV=utils babel src --out-dir lib --ignore src/index.js",
+    //打包工具类
+    "build:umd": "node build/bin/build-locale.js",
+    //umd不懂
+    "clean": "rimraf lib && rimraf packages/*/lib && rimraf test/**/coverage && lerna clean --yes",
+    //clean rimraf好像是一个库，https://www.npmjs.com/package/rimraf
+    //目前我就理解为 rm -rf 酱紫啦
+    "deploy": "npm run deploy:build && gh-pages -d examples/element-ui --remote eleme && del examples/element-ui",
+    //展开 （展开打包？？？？）
+    "deploy:build": "npm run build:file && cooking build -c build/cooking.demo.js -p && echo element.eleme.io>>examples/element-ui/CNAME",
+    "dev": "npm run bootstrap && npm run build:file && cooking watch -c build/cooking.demo.js -p & node build/bin/template.js",
+    "dev:play": "npm run build:file && cross-env PLAY_ENV=true cooking watch -c build/cooking.demo.js -p",
+    "dist": "npm run clean && npm run build:file && npm run lint && cooking build -c build/cooking.conf.js,build/cooking.common.js,build/cooking.component.js -p && npm run build:utils && npm run build:umd && npm run build:theme",
+    "dist:all": "node build/bin/build-all.js && npm run build:theme",
+    "i18n": "node build/bin/i18n.js",
+    //遵循国际标准
+    "lint": "eslint src/**/* test/**/* packages/**/*.{js,vue} build/**/* --quiet",
+    //lint 是一套代码强制检查的工具，（这里不太明白）
+    "pub": "npm run bootstrap && sh build/git-release.sh && sh build/release.sh && node build/bin/gen-indices.js && sh build/deploy-faas.sh",
+    //public？证书文件？
+    "pub:all": "npm run dist:all && lerna publish --skip-git && git commit -am 'publish independent packages' && git push eleme dev",
+    "test": "npm run lint && npm run build:theme && cross-env CI_ENV=/dev/ karma start test/unit/karma.conf.js --single-run",
+    //执行代码测试
+    "test:watch": "npm run build:theme && karma start test/unit/karma.conf.js"
+  },
+  //npm允许在package.json的 文件里面，使用scripts字段定义脚本命令。
+  //上面代码里面的每一个属性，对应一个npm 命令，按照语法规则来说，第一个参数bootstrap 就是npm bootstrap 等价于yarn | npm
+  //当然，，感觉这里不知道为什么这样写，从我现在的阅历来看它就是没有用的[尴尬]，可能是还太菜[/笑哭]
+  //这里面最常见也最一目了然的就是 npm dist 与 npm test  一个类似与build，即构建了线上版本，另一个打开了karma 测试工具
+  //原来我认为测试工具是没有什么用的，曾经想研究一下却发现不知道哪里用，但是当在看这个源码的时候，发现这种情况下测试工具简直就是神器好么！！！
+  //so 第一点：一个好的框架的实现一定要有整齐的模块基本规划以及方便简明的测试手段，那样能节约下很多测试方面的时间，加快开发
+  //还有就是，一开始我很懵的就是npm 进来之后，怎么run 一下，就跑了，还有build一下，就ok了，你会发现很多路径的配置命令的配置都在script这一块儿，
+  //等到差不多结构理顺了，就从头将这里捋一遍，顺便试试能不能总结出规律。
+  //ps ：配置参考 http://www.ruanyifeng.com/blog/2016/10/npm_scripts.html
+  "faas": {
+    "domain": "element",
+    "public": "temp_web/element"
+  },
+  //faas,网上查不到此字段，看起来好像没什么用，先放过
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:ElemeFE/element.git"
+  },
+  //指明代码被托管到何处
+  "homepage": "http://element.eleme.io",
+  //项目主页url
+  "keywords": [
+    "eleme",
+    "vue",
+    "components"
+  ],
+  //npm包的关键字，帮助人们找到这个包
+  "license": "MIT",
+  //开源协议
+  "bugs": {
+    "url": "https://github.com/ElemeFE/element/issues"
+  },
+  //项目错误跟踪页面
+  "unpkg": "lib/index.js",
+  //字面翻译不是包，，感觉不太对，先预留
+  "style": "lib/theme-chalk/index.css",
+  //样式文件路径
+  "dependencies": {
+    "async-validator": "~1.8.1",
+    "babel-helper-vue-jsx-merge-props": "^2.0.0",
+    "deepmerge": "^1.2.0",
+    "throttle-debounce": "^1.0.1"
+  },
+  //指定当前包所依赖的其他包
+  "peerDependencies": {
+    "vue": "^2.5.2"
+  },
+  //可选参数，兼容性依赖，如果你的包是插件，适合这种方式
+  "devDependencies": {
+    "algoliasearch": "^3.24.5",
+    "babel-cli": "^6.14.0",
+    "babel-core": "^6.14.0",
+    "babel-loader": "^6.2.5",
+    "babel-plugin-add-module-exports": "^0.2.1",
+    "babel-plugin-module-resolver": "^2.2.0",
+    "babel-plugin-syntax-jsx": "^6.8.0",
+    "babel-plugin-transform-vue-jsx": "^3.3.0",
+    "babel-preset-es2015": "^6.14.0",
+    "chai": "^3.5.0",
+    "cheerio": "^0.18.0",
+    "chokidar": "^1.7.0",
+    "cooking": "^1.5.4",
+    "cooking-lint": "^0.1.3",
+    "cooking-vue2": "^0.3.3",
+    "copy-webpack-plugin": "^4.1.1",
+    "coveralls": "^2.11.14",
+    "cp-cli": "^1.0.2",
+    "cross-env": "^3.1.3",
+    "css-loader": "^0.28.7",
+    "es6-promise": "^4.0.5",
+    "eslint": "^3.10.2",
+    "eslint-plugin-json": "^1.2.0",
+    "extract-text-webpack-plugin": "^3.0.1",
+    "file-loader": "^1.1.5",
+    "file-save": "^0.2.0",
+    "gh-pages": "^0.11.0",
+    "gulp": "^3.9.1",
+    "gulp-autoprefixer": "^4.0.0",
+    "gulp-cssmin": "^0.1.7",
+    "gulp-postcss": "^6.1.1",
+    "gulp-sass": "^3.1.0",
+    "highlight.js": "^9.3.0",
+    "html-loader": "^0.5.1",
+    "html-webpack-plugin": "^2.30.1",
+    "inject-loader": "^3.0.1",
+    "isparta-loader": "^2.0.0",
+    "json-loader": "^0.5.7",
+    "json-templater": "^1.0.4",
+    "karma": "^1.3.0",
+    "karma-chrome-launcher": "^2.2.0",
+    "karma-coverage": "^1.1.1",
+    "karma-mocha": "^1.2.0",
+    "karma-sinon-chai": "^1.2.4",
+    "karma-sourcemap-loader": "^0.3.7",
+    "karma-spec-reporter": "0.0.26",
+    "karma-webpack": "^1.8.0",
+    "lerna": "^2.0.0-beta.32",
+    "lolex": "^1.5.1",
+    "markdown-it": "^6.1.1",
+    "markdown-it-anchor": "^2.5.0",
+    "markdown-it-container": "^2.0.0",
+    "mocha": "^3.1.1",
+    "node-sass": "^4.5.3",
+    "perspective.js": "^1.0.0",
+    "postcss": "^5.1.2",
+    "postcss-loader": "0.11.1",
+    "postcss-salad": "^1.0.8",
+    "rimraf": "^2.5.4",
+    "sass-loader": "^6.0.6",
+    "sinon": "^1.17.6",
+    "sinon-chai": "^2.8.0",
+    "style-loader": "^0.19.0",
+    "transliteration": "^1.1.11",
+    "uppercamelcase": "^1.1.0",
+    "url-loader": "^0.6.2",
+    "vue": "^2.5.2",
+    "vue-loader": "^13.3.0",
+    "vue-markdown-loader": "1",
+    "vue-router": "2.7.0",
+    "vue-template-compiler": "^2.5.2",
+    "vue-template-es2015-compiler": "^1.6.0",
+    "webpack": "^3.7.1",
+    "webpack-dev-server": "^2.9.1",
+    "webpack-node-externals": "^1.6.0"
+  }
+  //开发运行种所需要的依赖，例如单元测试包
+}
